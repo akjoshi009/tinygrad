@@ -8,21 +8,25 @@ from tinygrad.lazy import Device, LazyBuffer
 
 # An instantiation of the Function is the Context
 class Function:
-  def __init__(self, device:str, *tensors:Tensor):
-    self.device, self.parents = device, tensors
-    self.needs_input_grad = [t.requires_grad for t in self.parents]
-    self.requires_grad = True if any(self.needs_input_grad) else (None if any(x is None for x in self.needs_input_grad) else False)
+    def __init__(self, device: str, *tensors: Tensor):
+        self.device = device
+        self.parents = tensors
+        self.needs_input_grad = [t.requires_grad for t in self.parents]
+        self.requires_grad = all(self.needs_input_grad) or (not isinstance(None, type(self.needs_input_grad)) and False)
 
-  def forward(self, *args, **kwargs): raise NotImplementedError(f"forward not implemented for {type(self)}")
-  def backward(self, *args, **kwargs): raise RuntimeError(f"backward not implemented for {type(self)}")
+    def forward(self, *args, **kwargs):
+        raise NotImplementedError(f"forward not implemented for {type(self)}")
 
-  @classmethod
-  def apply(fxn:Type[Function], *x:Tensor, **kwargs) -> Tensor:
-    ctx = fxn(x[0].device, *x)
-    ret = Tensor(ctx.forward(*[t.lazydata for t in x], **kwargs), device=ctx.device, requires_grad=ctx.requires_grad)
-    if ctx.requires_grad and not Tensor.no_grad: ret._ctx = ctx    # used by autograd engine
-    return ret
+    def backward(self, *args, **kwargs):
+        raise RuntimeError(f"backward not implemented for {type(self)}")
 
+    @classmethod
+    def apply(cls: Type[Function], *x: Tensor, **kwargs) -> Tensor:
+        ctx = cls(*x[:1], *x[1:], x[0].device)
+        ret = Tensor(ctx.forward(*[t.lazydata for t in x], **kwargs), device=ctx.device, requires_grad=ctx.requires_grad)
+        if ctx.requires_grad and not Tensor.no_grad:
+            ret._ctx = ctx    # used by autograd engine
+        return ret
 import tinygrad.mlops as mlops
 
 # **** start with two base classes, Tensor and Function ****
